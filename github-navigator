@@ -1,0 +1,129 @@
+#!/usr/bin/env python
+
+import argparse
+from time import sleep
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+
+def mkargs():
+    parser = argparse.ArgumentParser()
+
+    # positional arguments
+    parser.add_argument('-H', '--headless', action='store_true', help='Run in headless mode')
+    parser.add_argument('-r', '--repo', type=str, help='Repository to navigate to', required=True)
+    parser.add_argument('-s', '--screenshot-path', type=str, help='Path to save screenshot', default='screenshot.png')
+    parser.add_argument('-b', '--branch', type=str, help='Branch to navigate to', required=False)
+    parser.add_argument('-R', '--open-raw', action='store_true', help='Open raw file')
+
+    # array with the path to navigate to
+    parser.add_argument('-p', '--path', type=str, nargs='+', help='Path to navigate to inside the repository', required=False)
+
+    return parser.parse_args()
+
+
+def mkoptions(args):
+    options = Options()
+    if args.headless:
+        options.add_argument('--headless')
+
+    return options
+
+
+class GithubNavigator:
+    def __init__(self, args):
+        self.args = args
+        self.driver = webdriver.Firefox(options=mkoptions(args))
+        self.driver.get('https://github.com')
+
+    def dosearch(self):
+        searchbar = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.NAME, 'q'))
+        )
+
+        searchbar.send_keys(self.args.repo)
+        searchbar.send_keys(Keys.RETURN)
+
+        sleep(2)
+
+        self.select_link(self.get_appropiated_link())
+
+    def get_appropiated_link(self):
+        links = self.driver.find_elements(By.XPATH, '//a[@class="v-align-middle"]')
+        for link in links:
+            if self.args.repo.lower() in link.get_attribute('href').lower():
+                return link
+
+    def select_path(self, pathname):
+        links = self.driver.find_elements(By.XPATH, '//a[@class="js-navigation-open Link--primary"]')
+        for link in links:
+            if pathname.lower() in link.get_attribute('href').lower():
+                link.click()
+                sleep(2)
+                break
+
+    def select_branch(self, branchname):
+        branch_button = self.driver.find_element(By.CSS_SELECTOR, 'summary.btn.css-truncate')
+        branch_button.click()
+        sleep(3)
+
+        links = self.driver.find_elements(By.CSS_SELECTOR, 'a.SelectMenu-item')
+
+        for link in links:
+            if branchname.lower() in link.text.lower():
+                link.click()
+                break
+
+    def show_source(self):
+        print(self.driver.current_url)
+        with open("content", "w") as content_file:
+            content_file.write(
+                self.driver.page_source.replace(
+                    '<html><head><link rel="stylesheet" href="resource://content-accessible/plaintext.css"></head><body><pre>',
+                    ''
+                ).replace(
+                    '</pre></body></html>',
+                    ''
+                )
+            )
+
+    def select_link(self, link):
+        link.click()
+        sleep(2)
+
+        if self.args.branch:
+            self.select_branch(self.args.branch)
+            sleep(2)
+
+        if self.args.path:
+            for path in self.args.path:
+                self.select_path(path)
+
+        if self.args.open_raw:
+            raw_button = self.driver.find_element(By.LINK_TEXT, 'Raw')
+            if raw_button:
+                raw_button.click()
+                sleep(2)
+                self.show_source()
+
+        sleep(1)
+        self.doscreenshot()
+
+    def doscreenshot(self, should_quit=True):
+        self.driver.get_screenshot_as_file(self.args.screenshot_path)
+        if should_quit:
+            self.driver.quit()
+
+
+def main():
+    args = mkargs()
+    navigator = GithubNavigator(args)
+    navigator.dosearch()
+
+
+if __name__ == '__main__':
+    main()

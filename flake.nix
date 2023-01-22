@@ -18,7 +18,10 @@
 
               src = ./.;
 
-              propagatedBuildInputs = with pkgs.python3Packages; [ selenium ];
+              propagatedBuildInputs = with pkgs; [
+                python3Packages.selenium
+                geckodriver
+              ];
 
               doCheck = false;
 
